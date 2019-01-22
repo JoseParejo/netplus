@@ -74,9 +74,9 @@ main (int argc, char *argv[])
   OnOffHelper serverTV ("ns3::TcpSocketFactory", 
   	Address (InetSocketAddres(interfacesTV.GetAddress(0) ,11)));
 
-  ApplicationContainer appSe = serverSe.Install (nodosSe.Get (1));
-  ApplicationContainer appPe = serverPe.Install (nodosPe.Get (1));
-  ApplicationContainer appTV = serverTV.Install (nodosTV.Get (1));
+  ApplicationContainer appServerSe = serverSe.Install (nodosSe.Get (1));
+  ApplicationContainer appServerPe = serverPe.Install (nodosPe.Get (1));
+  ApplicationContainer appServerTV = serverTV.Install (nodosTV.Get (1));
 
   //serverApps.Start (Seconds (1.0));
   //serverApps.Stop (Seconds (10.0));
@@ -94,9 +94,12 @@ main (int argc, char *argv[])
   PacketSinkHelper clientTV ("ns3::TcpSocketFactory", 
   	Address (InetSocketAddres(interfacesTV.GetAddress(1), 11)));
 
-  ApplicationContainer clientApps = client.Install (nodes.Get (0));
-  clientApps.Start (Seconds (2.0));
-  clientApps.Stop (Seconds (10.0));
+  ApplicationContainer appClientSe = clientSe.Install (nodosSe.Get (0));
+  ApplicationContainer appClientPe = clientPe.Install (nodosPe.Get (0));
+  ApplicationContainer appClientTV = clientTV.Install (nodosTV.Get (0));
+
+  //clientApps.Start (Seconds (2.0));
+  //clientApps.Stop (Seconds (10.0));
 
   Simulator::Run ();
   Simulator::Destroy ();
