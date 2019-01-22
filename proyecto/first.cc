@@ -30,7 +30,7 @@ main (int argc, char *argv[])
   CommandLine cmd;
   cmd.Parse (argc, argv);
   
-  Time::SetResolution (Time::US);
+  Time::SetResolution (Time::M);
 
   NodeContainer nodosTV;
   NodeContainer nodosPe;
@@ -41,7 +41,16 @@ main (int argc, char *argv[])
   nodosPe.Create (1);
   nodosSe.Create (1);
 
-
+  Ptr <NormalRandomVariable> picoTrafico = CreateObject<NormalRandomVariable> ();
+  picoTrafico->SetAttribute("Mean", DoubleValue(8.0));
+  picoTrafico->SetAttribute("Variance", DoubleValue(2.0));
+  //picoTrafico->SetAttribute("Bound", )
+  Ptr <NormalRandomVariable> pton = CreateObject<NormalRandomVariable> ();
+  Ptr <NormalRandomVariable> ptoff = CreateObject<NormalRandomVariable> ();
+  pton->SetAttribute("Mean", DoubleValue(8.0));
+  pton->SetAttribute("Variance", DoubleValue(2.0));
+  ptoff->SetAttribute("Mean", DoubleValue(8.0));
+  ptoff->SetAttribute("Variance", DoubleValue(2.0));
 
   PointToPointHelper pointToPoint;
   pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("5Mbps"));
@@ -73,33 +82,38 @@ main (int argc, char *argv[])
   UdpEchoServerHelper serverPe (10);
   OnOffHelper serverTV ("ns3::TcpSocketFactory", 
   	Address (InetSocketAddres(interfacesTV.GetAddress(0) ,11)));
+  serverTV.SetAttribute("DataRate", DataRateValue());
+  serverTV.SetAttribute("PacketSize", UintegerValue());
+  serverTV.SetAttribute("OnTime", PointerValue(pton));
+  serverTV.SetAttribute("OffTime", PointerValue(ptoff));
+  //serverTV.SetAttribute("MaxBytes", UintegerValue());
+
 
   ApplicationContainer appServerSe = serverSe.Install (nodosSe.Get (1));
   ApplicationContainer appServerPe = serverPe.Install (nodosPe.Get (1));
   ApplicationContainer appServerTV = serverTV.Install (nodosTV.Get (1));
 
-  //serverApps.Start (Seconds (1.0));
-  //serverApps.Stop (Seconds (10.0));
+  //serverApps.Start (Hours (0.0));
+  //serverApps.Stop (Hours (12.0));
 
   UdpEchoClientHelper clientSe (interfacesSe.GetAddress (1), 9);
-  clientSe.SetAttribute ("MaxPackets", UintegerValue (1));
-  clientSe.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
+  //clientSe.SetAttribute ("MaxPackets", UintegerValue (1));
+  clientSe.SetAttribute ("Interval", TimeValue (Minutes (0.5)));
   clientSe.SetAttribute ("PacketSize", UintegerValue (1024));
   
   UdpEchoClientHelper clientPe (interfacesPe.GetAddress (1), 10);
-  clientPe.SetAttribute ("MaxPackets", UintegerValue (1));
-  clientPe.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
+  //clientPe.SetAttribute ("MaxPackets", UintegerValue (1));
+  clientPe.SetAttribute ("Interval", TimeValue (Hours (0.5)));
   clientPe.SetAttribute ("PacketSize", UintegerValue (1024));
 
   PacketSinkHelper clientTV ("ns3::TcpSocketFactory", 
   	Address (InetSocketAddres(interfacesTV.GetAddress(1), 11)));
-
   ApplicationContainer appClientSe = clientSe.Install (nodosSe.Get (0));
   ApplicationContainer appClientPe = clientPe.Install (nodosPe.Get (0));
   ApplicationContainer appClientTV = clientTV.Install (nodosTV.Get (0));
 
-  //clientApps.Start (Seconds (2.0));
-  //clientApps.Stop (Seconds (10.0));
+  //clientApps.Start (Hours (8.0));
+  //clientApps.Stop (Hours (10.0));
 
   Simulator::Run ();
   Simulator::Destroy ();
