@@ -89,6 +89,8 @@ main (int argc, char *argv[])
   address.SetBase ("10.1.3.0", "255.255.255.0");
   Ipv4InterfaceContainer interfacesSe = address.Assign (devicesSe);
 
+  Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
+
 //Creamos la aplicacion OnOff UDP para Series
   OnOffHelper serverSe ("ns3::UdpSocketFactory", 
   	Address (InetSocketAddres(interfacesSe.GetAddress(0) ,9)));
