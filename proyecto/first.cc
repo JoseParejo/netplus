@@ -69,18 +69,32 @@ main (int argc, char *argv[])
   address.SetBase ("10.1.3.0", "255.255.255.0");
   Ipv4InterfaceContainer interfacesSe = address.Assign (devicesSe);
 
-  UdpEchoServerHelper echoServer (9);
+  UdpEchoServerHelper serverSe (9);
+  UdpEchoServerHelper serverPe (10);
+  OnOffHelper serverTV ("ns3::TcpSocketFactory", 
+  	Address (InetSocketAddres(interfacesTV.GetAddress(0) ,11)));
 
-  ApplicationContainer serverApps = echoServer.Install (nodes.Get (1));
-  serverApps.Start (Seconds (1.0));
-  serverApps.Stop (Seconds (10.0));
+  ApplicationContainer appSe = serverSe.Install (nodosSe.Get (1));
+  ApplicationContainer appPe = serverPe.Install (nodosPe.Get (1));
+  ApplicationContainer appTV = serverTV.Install (nodosTV.Get (1));
 
-  UdpEchoClientHelper echoClient (interfaces.GetAddress (1), 9);
-  echoClient.SetAttribute ("MaxPackets", UintegerValue (1));
-  echoClient.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
-  echoClient.SetAttribute ("PacketSize", UintegerValue (1024));
+  //serverApps.Start (Seconds (1.0));
+  //serverApps.Stop (Seconds (10.0));
 
-  ApplicationContainer clientApps = echoClient.Install (nodes.Get (0));
+  UdpEchoClientHelper clientSe (interfacesSe.GetAddress (1), 9);
+  clientSe.SetAttribute ("MaxPackets", UintegerValue (1));
+  clientSe.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
+  clientSe.SetAttribute ("PacketSize", UintegerValue (1024));
+  
+  UdpEchoClientHelper clientPe (interfacesPe.GetAddress (1), 10);
+  clientPe.SetAttribute ("MaxPackets", UintegerValue (1));
+  clientPe.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
+  clientPe.SetAttribute ("PacketSize", UintegerValue (1024));
+
+  PacketSinkHelper clientTV ("ns3::TcpSocketFactory", 
+  	Address (InetSocketAddres(interfacesTV.GetAddress(1), 11)));
+
+  ApplicationContainer clientApps = client.Install (nodes.Get (0));
   clientApps.Start (Seconds (2.0));
   clientApps.Stop (Seconds (10.0));
 
