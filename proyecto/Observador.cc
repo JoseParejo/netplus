@@ -9,173 +9,318 @@ using namespace ns3;
 NS_LOG_COMPONENT_DEFINE ("Observador");
 
 
-Observador::Observador (Ptr<OnOffApplication> tcp_source_ptr, Ptr<OnOffApplication> udp_source_ptr,
-		Ptr<PacketSink> tcp_sink_ptr, Ptr<PacketSink> udp_sink_ptr, std::string name)
+Observador::Observador (
+	Ptr<OnOffApplication> vip_source_ptr,Ptr<OnOffApplication> tv_source_ptr, 
+	Ptr<OnOffApplication> pel_source_ptr, Ptr<OnOffApplication> ser_source_ptr,
+	Ptr<PacketSink> vip_sink_ptr, Ptr<PacketSink> tv_sink_ptr,
+	Ptr<PacketSink> pel_sink_ptr, Ptr<PacketSink> ser_sink_ptr)
 {
-	NS_LOG_FUNCTION( name << "START");
-	NS_LOG_INFO( m_name << " Observador::Observador START");
+	NS_LOG_FUNCTION("START");
+	NS_LOG_INFO(" Observador::Observador START");
 	
-	m_name = name;
 	
-	m_tcp_source_ptr = tcp_source_ptr;
-	NS_LOG_DEBUG( m_name << " Fuente TCP " << m_tcp_source_ptr);
+	m_vip_source_ptr = vip_source_ptr;
+	NS_LOG_DEBUG(" Fuente Vip " << m_vip_source_ptr);
 
-	m_udp_source_ptr = udp_source_ptr;
-	NS_LOG_DEBUG( m_name << " Fuente UDP " << m_udp_source_ptr);
-	
-	m_paquetesTxTcp = 0;
-	m_paquetesTxUdp = 0;
+	m_tv_source_ptr = tv_source_ptr;
+	NS_LOG_DEBUG(" Fuente TV " << m_tv_source_ptr);
 
-	m_tcp_sink_ptr = tcp_sink_ptr;
-	NS_LOG_DEBUG( m_name << " Sumidero TCP " << m_tcp_sink_ptr);
+	m_pel_source_ptr = pel_source_ptr;
+	NS_LOG_DEBUG(" Fuente Peliculas " << m_pel_source_ptr);
 
-	m_udp_sink_ptr = udp_sink_ptr;
-	NS_LOG_DEBUG( m_name << " Sumidero UDP " << m_udp_sink_ptr);
+	m_ser_source_ptr = ser_source_ptr;
+	NS_LOG_DEBUG(" Fuente Series " << m_ser_source_ptr);
 	
-	m_paquetesRxTcp = 0;
-	m_paquetesRxUdp = 0;
+	m_paquetesTxVip = 0;
+	m_paquetesTxTv = 0;
+	m_paquetesTxPe = 0;
+	m_paquetesTxSe = 0;
+
+	client_vip = vip_sink_ptr;
+	NS_LOG_DEBUG(" Sumidero Vip " << client_vip);
 	
-	DelayJitterEstimation  m_tcpDelayJitter; 
-	DelayJitterEstimation  m_udpDelayJitter; 
+	client_tv = tv_sink_ptr;
+	NS_LOG_DEBUG(" Sumidero TV " << client_tv);
+	
+	client_pel = pel_sink_ptr;
+	NS_LOG_DEBUG(" Sumidero Peliculas " << client_pel);
+	
+	client_ser = ser_sink_ptr;
+	NS_LOG_DEBUG(" Sumidero Series " << client_ser);
+
+	m_paquetesRxVip = 0;
+	m_paquetesRxTv = 0;
+	m_paquetesRxPe = 0;
+	m_paquetesRxSe = 0;
 	
 	ProgramaTrazas ();
-	NS_LOG_FUNCTION( m_name << "END");
+	NS_LOG_FUNCTION("END");
 }
 
-
-void Observador::DoDispose ()
-{
-	NS_LOG_FUNCTION( m_name << "START");
-	NS_LOG_INFO( m_name << " DoDispose media retardo FINAL " << m_acumTcpDelay.Mean());
-	
-	Object::DoDispose ();
-}
-
-
+//Funcion que programa las trazas necesarias para la gestion del canal UDP.
 void Observador::ProgramaTrazas ()
 {
-	NS_LOG_FUNCTION( m_name << "START");
+   NS_LOG_FUNCTION("ProgramaTrazas");
+   server_vip->TraceConnectWithoutContext ("Tx", MakeCallback (&Observador::PaqueteEntregadoVip, this));
+   client_vip->TraceConnectWithoutContext ("Rx", MakeCallback (&Observador::PaqueteRecibidoVip, this));
+   server_tv->TraceConnectWithoutContext ("Tx", MakeCallback (&Observador::PaqueteEntregadoTV, this));
+   client_tv->TraceConnectWithoutContext ("Rx", MakeCallback (&Observador::PaqueteRecibidoTV, this));
+   server_pel->TraceConnectWithoutContext ("Tx", MakeCallback (&Observador::PaqueteEntregadoPel, this));
+   client_pel->TraceConnectWithoutContext ("Rx", MakeCallback (&Observador::PaqueteRecibidoPel, this));
+   server_ser->TraceConnectWithoutContext ("Tx", MakeCallback (&Observador::PaqueteEntregadoSer, this));
+   client_ser->TraceConnectWithoutContext ("Rx", MakeCallback (&Observador::PaqueteRecibidoSer, this));
+}
 
-	m_tcp_source_ptr->TraceConnectWithoutContext ("Tx", MakeCallback (&Observador::PaqueteTxTcp, this));
-	// Sólo hay tráfico UDP entre los nodos E y C
-	if (m_name == "C") {
-		NS_LOG_DEBUG( m_name << " Tracing UDP Tx");
-		m_udp_source_ptr->TraceConnectWithoutContext ("Tx", MakeCallback (&Observador::PaqueteTxUdp, this));
+//Funcion que gestiona la traza MacTx del nodo sumidero
+void Observador::PaqueteEntregadoVip (Ptr<const Packet> pqt)
+{
+	NS_LOG_FUNCTION_NOARGS();
+	
+	TcpHeader header;
+	pqt->PeekHeader(header);
+	
+	SequenceNumber32 aux_secuencia = header.GetSequenceNumber();
+    	
+	//Realizamos una búsqueda del paquete en el map
+    std::map<SequenceNumber32, Time>::iterator Iterador=Envios.find(aux_secuencia);    
+    
+
+    if(Iterador == Envios.end()) {
+       
+        //Si el paquete no se encuentra registrado en el map, se crea una fila para llevar la cuenta del numero de intentos
+        NS_LOG_DEBUG("[NUEVO ENVIO] Paquete no encontrado en el map, n secuencia" << aux_secuencia << "[tx = " << m_paquetesTxVip << "]");
+        Envios [aux_secuencia] = (Simulator::Now()); 
+    } 
+
+    else {   
+        //El uid se encuentra en la tabla, por lo que el paquete ya ha sido registrado
+        //De manera que incrementamos el numero de intentos en 1
+        NS_LOG_DEBUG("[REENVIO] Paquete encontrado en el map, n secuencia" << aux_secuencia<< "[tx = " << m_paquetesTxVip << "]");
+    }
+}
+//Funcion que gestiona la traza MacTx del nodo sumidero
+void Observador::PaqueteEntregadoTV (Ptr<const Packet> pqt)
+{
+	NS_LOG_FUNCTION_NOARGS();
+	
+	TcpHeader header;
+	pqt->PeekHeader(header);
+	
+	SequenceNumber32 aux_secuencia = header.GetSequenceNumber();
+    	
+	//Realizamos una búsqueda del paquete en el map
+    std::map<SequenceNumber32, Time>::iterator Iterador=Envios.find(aux_secuencia);    
+    
+
+    if(Iterador == Envios.end()) {
+       
+        //Si el paquete no se encuentra registrado en el map, se crea una fila para llevar la cuenta del numero de intentos
+        NS_LOG_DEBUG("[NUEVO ENVIO] Paquete no encontrado en el map, n secuencia" << aux_secuencia << "[tx = " << m_paquetesTxTv << "]");
+        Envios [aux_secuencia] = (Simulator::Now()); 
+    } 
+
+    else {   
+        //El uid se encuentra en la tabla, por lo que el paquete ya ha sido registrado
+        //De manera que incrementamos el numero de intentos en 1
+        NS_LOG_DEBUG("[REENVIO] Paquete encontrado en el map, n secuencia" << aux_secuencia<< "[tx = " << m_paquetesTxTv << "]");
+    }
+}
+//Funcion que indica que se ha enviado un paquete por el canal UDP.
+void Observador::PaqueteEntregadoPel (Ptr<const Packet> pqt)
+{
+	uint64_t uid_enviado;
+	NS_LOG_FUNCTION("PaqueteEntregado");
+	NS_LOG_DEBUG("Envio de paquete: " << pqt->GetUid() <<" en el instante: " << Simulator::Now () );
+	
+	//Obtenemos el uid del paquete que enviamos y lo almacenamos en una tabla, junto con el instante en el que se envia
+	uid_enviado = pqt->GetUid();
+	
+	EnviosUDP [uid_enviado] = Simulator::Now(); //guardamos el tiempo en la tabla con indice el identificador del paquete
+	
+	//Incrementamos el numero de paquetes enviado para calcular estadísticos
+	m_paquetesTxPe++;
+}
+
+//Funcion que indica que se ha enviado un paquete por el canal UDP.
+void Observador::PaqueteEntregadoSer (Ptr<const Packet> pqt)
+{
+	uint64_t uid_enviado;
+	NS_LOG_FUNCTION("PaqueteEntregado");
+	NS_LOG_DEBUG("Envio de paquete: " << pqt->GetUid() <<" en el instante: " << Simulator::Now () );
+	
+	//Obtenemos el uid del paquete que enviamos y lo almacenamos en una tabla, junto con el instante en el que se envia
+	uid_enviado = pqt->GetUid();
+	
+	EnviosUDP [uid_enviado] = Simulator::Now(); //guardamos el tiempo en la tabla con indice el identificador del paquete
+	
+	//Incrementamos el numero de paquetes enviado para calcular estadísticos
+	m_paquetesTxSe++;
+}
+
+//Funcion que gestiona la traza MacRx del nodo sumidero
+void Observador::PaqueteRecibidoVip (Ptr<const Packet> pqt)
+{
+	NS_LOG_FUNCTION_NOARGS();
+	
+	TcpHeader header;
+	pqt->PeekHeader(header);
+	
+	SequenceNumber32 aux_secuencia = header.GetSequenceNumber();
+	
+	//Realizamos una búsqueda del paquete en el map
+    std::map<SequenceNumber32, Time>::iterator Iterador=Envios.find(aux_secuencia);    
+    
+    if(Iterador == Envios.end()) {
+        //Si el paquete no se encuentra registrado en el map, se crea una fila para llevar la cuenta del numero de intentos
+        NS_LOG_DEBUG("[ERROR] Paquete no encontrado en el map, numero de secuencia" << aux_secuencia );
+    } 
+    else {  
+        //El uid se encuentra en la tabla, por lo que el paquete ya ha sido registrado
+        //De manera que incrementamos el numero de intentos en 1
+        NS_LOG_DEBUG("[PAQUETE RECIBIDO] numero de secuencia = " << aux_secuencia);
+		
+		Time retardo = (Simulator::Now()) - Envios[aux_secuencia];
+		m_retardos.Update (retardo.GetMilliSeconds());
+		Envios.erase(Iterador);
+			
+		if(m_numPaqRx > 1)
+			m_variacion_retardos.Update(abs(ultimo_retardo.GetMilliSeconds() - retardo.GetMilliSeconds()));
+	
+		//Actualizamos "ultimo_retardo" para el siguiente paquete
+		ultimo_retardo = retardo;		
+    }
+}
+
+//Funcion que gestiona la traza MacRx del nodo sumidero
+void Observador::PaqueteRecibidoTV (Ptr<const Packet> pqt)
+{
+	NS_LOG_FUNCTION_NOARGS();
+	
+	TcpHeader header;
+	pqt->PeekHeader(header);
+	
+	SequenceNumber32 aux_secuencia = header.GetSequenceNumber();
+	
+	//Realizamos una búsqueda del paquete en el map
+    std::map<SequenceNumber32, Time>::iterator Iterador=Envios.find(aux_secuencia);    
+    
+    if(Iterador == Envios.end()) {
+        //Si el paquete no se encuentra registrado en el map, se crea una fila para llevar la cuenta del numero de intentos
+        NS_LOG_DEBUG("[ERROR] Paquete no encontrado en el map, numero de secuencia" << aux_secuencia );
+    } 
+    else {  
+        //El uid se encuentra en la tabla, por lo que el paquete ya ha sido registrado
+        //De manera que incrementamos el numero de intentos en 1
+        NS_LOG_DEBUG("[PAQUETE RECIBIDO] numero de secuencia = " << aux_secuencia);
+		
+		Time retardo = (Simulator::Now()) - Envios[aux_secuencia];
+		m_retardos.Update (retardo.GetMilliSeconds());
+		Envios.erase(Iterador);
+			
+		if(m_numPaqRx > 1)
+			m_variacion_retardos.Update(abs(ultimo_retardo.GetMilliSeconds() - retardo.GetMilliSeconds()));
+	
+		//Actualizamos "ultimo_retardo" para el siguiente paquete
+		ultimo_retardo = retardo;		
+    }
+}
+
+//Funcion que indica que se ha recibido un paquete por el canal UDP.
+void Observador::PaqueteRecibidoSer (Ptr<const Packet> pqt, const Address &)
+{
+	NS_LOG_FUNCTION("Observador:PaqueteRecibido");
+	uint64_t uid_recibido = pqt->GetUid ();
+	
+	//Obtenemos el uid del paquete que hemos recibido y lo buscamos en la tabla del nodo
+	std::map<uint64_t, Time>::iterator Comparador=EnviosUDP.find(uid_recibido);    //Buscamos en la tabla el uid
+	
+	if(Comparador == EnviosUDP.end()) {
+		//Si el comparador señala al final de la tabla, esque no hemos encontrado el uid, y el paquete no lo ha enviado este nodo
+		NS_LOG_DEBUG("ERROR " << uid_recibido << " no encontrado en el sumidero");
+	} 
+	
+	else {  	
+		//El uid se encuentra en la tabla, por lo que el paquete lo envió este nodo
+		//Calculamos el retardo
+		Time retardo = (Simulator::Now() -EnviosUDP[uid_recibido]);    //si lo encontramos calculamos el retardo
+		
+		//Retiramos la tupla en la que se encontraba este paquete
+		EnviosUDP.erase(Comparador); 
+		
+		//Incrementamos el numero de paquetes recibidos correctamente para calcular los estadísticos
+		m_numPaqRx++;
+		NS_LOG_DEBUG("Recepcion de paquete ENCONTRADO: " << uid_recibido);
+		
+		//Si existe retardo, lo almacenamos para posteriormente calcular el estadistico
+		NS_LOG_DEBUG("Instante: " << Simulator::Now() << " Retardo calculado " << retardo << " para el paquete: " << uid_recibido);
+		m_retardos.Update (retardo.GetMilliSeconds());
+		
+		if(m_numPaqRx > 1)
+			m_variacion_retardos.Update(abs(ultimo_retardo.GetMilliSeconds() - retardo.GetMilliSeconds()));
+	
+		//Actualizamos "ultimo_retardo" para el siguiente paquete
+		ultimo_retardo = retardo;
 	}
+}
 
-	m_tcp_sink_ptr->TraceConnectWithoutContext ("Rx", MakeCallback (&Observador::PaqueteRxTcp, this));
-	if (m_name == "C") {
-		NS_LOG_DEBUG( m_name << " Tracing UDP Rx");
-		m_udp_sink_ptr->TraceConnectWithoutContext ("Rx", MakeCallback (&Observador::PaqueteRxUdp, this));
+//Funcion que indica que se ha recibido un paquete por el canal UDP.
+void Observador::PaqueteRecibidoPel (Ptr<const Packet> pqt, const Address &)
+{
+	NS_LOG_FUNCTION("Observador:PaqueteRecibido");
+	uint64_t uid_recibido = pqt->GetUid ();
+	
+	//Obtenemos el uid del paquete que hemos recibido y lo buscamos en la tabla del nodo
+	std::map<uint64_t, Time>::iterator Comparador=EnviosUDP.find(uid_recibido);    //Buscamos en la tabla el uid
+	
+	if(Comparador == EnviosUDP.end()) {
+		//Si el comparador señala al final de la tabla, esque no hemos encontrado el uid, y el paquete no lo ha enviado este nodo
+		NS_LOG_DEBUG("ERROR " << uid_recibido << " no encontrado en el sumidero");
+	} 
+	
+	else {  	
+		//El uid se encuentra en la tabla, por lo que el paquete lo envió este nodo
+		//Calculamos el retardo
+		Time retardo = (Simulator::Now() -EnviosUDP[uid_recibido]);    //si lo encontramos calculamos el retardo
+		
+		//Retiramos la tupla en la que se encontraba este paquete
+		EnviosUDP.erase(Comparador); 
+		
+		//Incrementamos el numero de paquetes recibidos correctamente para calcular los estadísticos
+		m_paquetesRxPe++;
+		NS_LOG_DEBUG("Recepcion de paquete ENCONTRADO: " << uid_recibido);
+		
+		//Si existe retardo, lo almacenamos para posteriormente calcular el estadistico
+		NS_LOG_DEBUG("Instante: " << Simulator::Now() << " Retardo calculado " << retardo << " para el paquete: " << uid_recibido);
+		m_retardos.Update (retardo.GetMilliSeconds());
+		
+		if(m_paquetesRxPe > 1)
+			m_variacion_retardos.Update(abs(ultimo_retardo.GetMilliSeconds() - retardo.GetMilliSeconds()));
+	
+		//Actualizamos "ultimo_retardo" para el siguiente paquete
+		ultimo_retardo = retardo;
 	}
+}
+
+//Funcion que devuelve el porcentaje de paquetes correctos en la comunicacion entre los nodos C y E.
+double Observador::GetPorcentajeCorrecto ()
+{
+	NS_LOG_INFO("Rx = " << m_numPaqRx << " y Tx = " << m_paquetesTx);
+	double porcentaje = ((double)m_numPaqRx / ((double) m_paquetesTx))*100;
 	
-	NS_LOG_INFO( m_name << " Todo Bien Observador::ProgramaTrazas"); 
-	NS_LOG_FUNCTION( m_name << "END");
-}
-
-
-void Observador::PaqueteTxTcp (Ptr<const Packet>pqt_ptr)
-{
-	NS_LOG_FUNCTION( m_name << pqt_ptr);
-	double now = Simulator::Now().GetDouble();
+	if(porcentaje>100)
+		porcentaje = 100;
 	
-	NS_LOG_DEBUG( m_name << " PrepareTxTcp");
-	m_tcpDelayJitter.PrepareTx (pqt_ptr);
-	m_paquetesTxTcp++;
-	NS_LOG_DEBUG( m_name << " TxTcp " << now);
-	NS_LOG_FUNCTION( m_name << "END");
+	return porcentaje;
 }
 
-void Observador::PaqueteTxUdp (Ptr<const Packet>pqt_ptr)
+//Funcion que devuelve el retardo medio calculado a lo largo de la simulacion
+double Observador::GetRetardoMedio ()
+{	
+	return m_retardos.Mean();
+}
+
+//Funcion que devuelve el valor medio de la variacion de retardo calculada a lo largo de la simulacion
+double Observador::GetVariacionMedia ()
 {
-	NS_LOG_FUNCTION( m_name << pqt_ptr);
-	double now = Simulator::Now().GetDouble();
-	
-	NS_LOG_DEBUG( m_name << " PrepareTxUdp");
-	m_udpDelayJitter.PrepareTx (pqt_ptr);
-	m_paquetesTxUdp++;
-	NS_LOG_DEBUG( m_name << " TxUdp " << now);
-	NS_LOG_FUNCTION( m_name << "END");
+	return m_variacion_retardos.Mean();
 }
-
-
-void Observador::PaqueteRxTcp (Ptr<const Packet> pqt_ptr, const Address &address)
-{
-	NS_LOG_FUNCTION( m_name << pqt_ptr << address << pqt_ptr->GetSize() );
-	
-	m_tcpDelayJitter.RecordRx (pqt_ptr);	
-	m_paquetesRxTcp++;
-	NS_LOG_DEBUG( m_name << " RxTcp LastJitter: " << m_tcpDelayJitter.GetLastJitter() <<
-			", LastDelay: " << m_tcpDelayJitter.GetLastDelay() <<
-			", packet #" << m_paquetesRxTcp
-			);
-	
-	m_acumTcpDelay.Update(m_tcpDelayJitter.GetLastDelay().GetDouble() );
-	m_acumTcpJitter.Update(m_tcpDelayJitter.GetLastJitter() );
-	
-	NS_LOG_FUNCTION( m_name << "END");
-}
-
-
-void Observador::PaqueteRxUdp (Ptr<const Packet> pqt_ptr, const Address &address)
-{
-	NS_LOG_FUNCTION( m_name << pqt_ptr << address << pqt_ptr->GetSize() );
-	
-	m_udpDelayJitter.RecordRx (pqt_ptr);
-	m_paquetesRxUdp++;
-	NS_LOG_DEBUG( m_name << " RxUdp LastJitter: " << m_udpDelayJitter.GetLastJitter() <<
-			", LastDelay: " << m_udpDelayJitter.GetLastDelay() <<
-			", packet #" << m_paquetesRxUdp
-			);
-	
-	m_acumUdpDelay.Update(m_udpDelayJitter.GetLastDelay().GetDouble() );
-	m_acumUdpJitter.Update(m_udpDelayJitter.GetLastJitter() );
-
-	NS_LOG_FUNCTION( m_name << "END");
-}
-
-
-double Observador::GetTcpRxCorrectos()
-{
-	NS_LOG_FUNCTION( m_name << m_paquetesRxTcp << m_paquetesTxTcp);
-	NS_LOG_DEBUG( m_name << " GetTcpRxCorrectos " << m_paquetesRxTcp << " / "<< m_paquetesTxTcp);
-	return m_paquetesTxTcp ? (double) m_paquetesRxTcp/m_paquetesTxTcp : std::numeric_limits<double>::quiet_NaN();
-}
-
-
-double Observador::GetUdpRxCorrectos()
-{
-	NS_LOG_FUNCTION( m_name << m_paquetesRxUdp << m_paquetesTxUdp);
-	NS_LOG_DEBUG( m_name << " GetUdpRxCorrectos " << m_paquetesRxUdp << " / "<< m_paquetesTxUdp);
-	return m_paquetesTxUdp ? (double) m_paquetesRxUdp/m_paquetesTxUdp : std::numeric_limits<double>::quiet_NaN();
-}
-
-
-double Observador::GetTcpDelayMean()
-{
-	NS_LOG_FUNCTION( m_name << m_acumTcpDelay.Mean());
-	return m_acumTcpDelay.Mean();
-}
-
-
-double Observador::GetTcpJitterMean()
-{
-	NS_LOG_FUNCTION( m_name << m_acumTcpJitter.Mean());
-	return m_acumTcpJitter.Mean();
-}
-
-
-double Observador::GetUdpDelayMean()
-{
-	NS_LOG_FUNCTION( m_name << m_acumUdpDelay.Mean());
-	return m_acumUdpDelay.Mean();
-}
-
-
-double Observador::GetUdpJitterMean()
-{
-	NS_LOG_FUNCTION( m_name << m_acumUdpJitter.Mean());
-	return m_acumUdpJitter.Mean();
-}
-
-
