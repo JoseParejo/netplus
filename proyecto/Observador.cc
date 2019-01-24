@@ -1,12 +1,28 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
-
-
+///* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 
 #include "Observador.h"
 
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("Observador");
+
+typedef struct porcentaje {
+	double porcentaje_vip;
+	double porcentaje_tv;
+	double porcentaje_stream;
+}PORCENTAJE;
+
+typedef struct mediaRetardo {
+	double mediaRetardo_vip;
+	double mediaRetardo_tv;
+	double mediaRetardo_stream;
+}MEDIARETARDO;
+
+typedef struct variacionRetardo {
+	double variacionRetardo_vip;
+	double variacionRetardo_tv;
+	double variacionRetardo_stream;
+}VARIACIONRETARDO;
 
 
 Observador::Observador (
@@ -19,17 +35,17 @@ Observador::Observador (
 	NS_LOG_INFO(" Observador::Observador START");
 	
 	
-	m_vip_source_ptr = vip_source_ptr;
-	NS_LOG_DEBUG(" Fuente Vip " << m_vip_source_ptr);
+	server_vip = vip_source_ptr;
+	NS_LOG_DEBUG(" Fuente Vip " << server_vip);
 
-	m_tv_source_ptr = tv_source_ptr;
-	NS_LOG_DEBUG(" Fuente TV " << m_tv_source_ptr);
+	server_tv = tv_source_ptr;
+	NS_LOG_DEBUG(" Fuente TV " << server_tv);
 
-	m_pel_source_ptr = pel_source_ptr;
-	NS_LOG_DEBUG(" Fuente Peliculas " << m_pel_source_ptr);
+	server_pel = pel_source_ptr;
+	NS_LOG_DEBUG(" Fuente Peliculas " << server_pel);
 
-	m_ser_source_ptr = ser_source_ptr;
-	NS_LOG_DEBUG(" Fuente Series " << m_ser_source_ptr);
+	server_ser = ser_source_ptr;
+	NS_LOG_DEBUG(" Fuente Series " << server_ser);
 	
 	m_paquetesTxVip = 0;
 	m_paquetesTxTv = 0;
@@ -52,6 +68,22 @@ Observador::Observador (
 	m_paquetesRxTv = 0;
 	m_paquetesRxPe = 0;
 	m_paquetesRxSe = 0;
+
+	ultimo_retardo_vip = Time("0s");
+	m_retardos_vip.Reset();
+	m_variacion_retardos_vip.Reset();
+
+	ultimo_retardo_tv = Time("0s");
+	m_retardos_tv.Reset();
+	m_variacion_retardos_tv.Reset();
+
+	ultimo_retardo_pel = Time("0s");
+	m_retardos_pel.Reset();
+	m_variacion_retardos_pel.Reset();
+
+	ultimo_retardo_ser = Time("0s");
+	m_retardos_ser.Reset();
+	m_variacion_retardos_ser.Reset();
 	
 	ProgramaTrazas ();
 	NS_LOG_FUNCTION("END");
@@ -71,7 +103,7 @@ void Observador::ProgramaTrazas ()
    client_ser->TraceConnectWithoutContext ("Rx", MakeCallback (&Observador::PaqueteRecibidoSer, this));
 }
 
-//Funcion que gestiona la traza MacTx del nodo sumidero
+//Funcion que gestiona la traza Tx del nodo sumidero
 void Observador::PaqueteEntregadoVip (Ptr<const Packet> pqt)
 {
 	NS_LOG_FUNCTION_NOARGS();
@@ -98,7 +130,8 @@ void Observador::PaqueteEntregadoVip (Ptr<const Packet> pqt)
         NS_LOG_DEBUG("[REENVIO] Paquete encontrado en el map, n secuencia" << aux_secuencia<< "[tx = " << m_paquetesTxVip << "]");
     }
 }
-//Funcion que gestiona la traza MacTx del nodo sumidero
+
+//Funcion que gestiona la traza Tx del nodo sumidero
 void Observador::PaqueteEntregadoTV (Ptr<const Packet> pqt)
 {
 	NS_LOG_FUNCTION_NOARGS();
@@ -125,6 +158,7 @@ void Observador::PaqueteEntregadoTV (Ptr<const Packet> pqt)
         NS_LOG_DEBUG("[REENVIO] Paquete encontrado en el map, n secuencia" << aux_secuencia<< "[tx = " << m_paquetesTxTv << "]");
     }
 }
+
 //Funcion que indica que se ha enviado un paquete por el canal UDP.
 void Observador::PaqueteEntregadoPel (Ptr<const Packet> pqt)
 {
@@ -157,7 +191,7 @@ void Observador::PaqueteEntregadoSer (Ptr<const Packet> pqt)
 	m_paquetesTxSe++;
 }
 
-//Funcion que gestiona la traza MacRx del nodo sumidero
+//Funcion que gestiona la traza Rx del nodo sumidero
 void Observador::PaqueteRecibidoVip (Ptr<const Packet> pqt)
 {
 	NS_LOG_FUNCTION_NOARGS();
@@ -179,15 +213,15 @@ void Observador::PaqueteRecibidoVip (Ptr<const Packet> pqt)
         //De manera que incrementamos el numero de intentos en 1
         NS_LOG_DEBUG("[PAQUETE RECIBIDO] numero de secuencia = " << aux_secuencia);
 		
-		Time retardo = (Simulator::Now()) - Envios[aux_secuencia];
-		m_retardos.Update (retardo.GetMilliSeconds());
+		Time retardo_vip = (Simulator::Now()) - Envios[aux_secuencia];
+		m_retardos_vip.Update (retardo_vip.GetMilliSeconds());
 		Envios.erase(Iterador);
 			
 		if(m_numPaqRx > 1)
-			m_variacion_retardos.Update(abs(ultimo_retardo.GetMilliSeconds() - retardo.GetMilliSeconds()));
+			m_variacion_retardos_vip.Update(abs(ultimo_retardo_vip.GetMilliSeconds() - retardo_vip.GetMilliSeconds()));
 	
 		//Actualizamos "ultimo_retardo" para el siguiente paquete
-		ultimo_retardo = retardo;		
+		ultimo_retardo_vip = retardo_vip;		
     }
 }
 
@@ -213,15 +247,15 @@ void Observador::PaqueteRecibidoTV (Ptr<const Packet> pqt)
         //De manera que incrementamos el numero de intentos en 1
         NS_LOG_DEBUG("[PAQUETE RECIBIDO] numero de secuencia = " << aux_secuencia);
 		
-		Time retardo = (Simulator::Now()) - Envios[aux_secuencia];
-		m_retardos.Update (retardo.GetMilliSeconds());
+		Time retardo_tv = (Simulator::Now()) - Envios[aux_secuencia];
+		m_retardos_tv.Update (retardo_tv.GetMilliSeconds());
 		Envios.erase(Iterador);
 			
 		if(m_numPaqRx > 1)
-			m_variacion_retardos.Update(abs(ultimo_retardo.GetMilliSeconds() - retardo.GetMilliSeconds()));
+			m_variacion_retardos_tv.Update(abs(ultimo_retardo_tv.GetMilliSeconds() - retardo_tv.GetMilliSeconds()));
 	
 		//Actualizamos "ultimo_retardo" para el siguiente paquete
-		ultimo_retardo = retardo;		
+		ultimo_retardo_tv = retardo_tv;		
     }
 }
 
@@ -242,7 +276,7 @@ void Observador::PaqueteRecibidoSer (Ptr<const Packet> pqt, const Address &)
 	else {  	
 		//El uid se encuentra en la tabla, por lo que el paquete lo envió este nodo
 		//Calculamos el retardo
-		Time retardo = (Simulator::Now() -EnviosUDP[uid_recibido]);    //si lo encontramos calculamos el retardo
+		Time retardo_ser = (Simulator::Now() -EnviosUDP[uid_recibido]);    //si lo encontramos calculamos el retardo
 		
 		//Retiramos la tupla en la que se encontraba este paquete
 		EnviosUDP.erase(Comparador); 
@@ -252,14 +286,14 @@ void Observador::PaqueteRecibidoSer (Ptr<const Packet> pqt, const Address &)
 		NS_LOG_DEBUG("Recepcion de paquete ENCONTRADO: " << uid_recibido);
 		
 		//Si existe retardo, lo almacenamos para posteriormente calcular el estadistico
-		NS_LOG_DEBUG("Instante: " << Simulator::Now() << " Retardo calculado " << retardo << " para el paquete: " << uid_recibido);
-		m_retardos.Update (retardo.GetMilliSeconds());
+		NS_LOG_DEBUG("Instante: " << Simulator::Now() << " Retardo calculado " << retardo_ser << " para el paquete: " << uid_recibido);
+		m_retardos_ser.Update (retardo_ser.GetMilliSeconds());
 		
 		if(m_numPaqRx > 1)
-			m_variacion_retardos.Update(abs(ultimo_retardo.GetMilliSeconds() - retardo.GetMilliSeconds()));
+			m_variacion_retardos_ser.Update(abs(ultimo_retardo_ser.GetMilliSeconds() - retardo_ser.GetMilliSeconds()));
 	
 		//Actualizamos "ultimo_retardo" para el siguiente paquete
-		ultimo_retardo = retardo;
+		ultimo_retardo_ser = retardo_ser;
 	}
 }
 
@@ -280,7 +314,7 @@ void Observador::PaqueteRecibidoPel (Ptr<const Packet> pqt, const Address &)
 	else {  	
 		//El uid se encuentra en la tabla, por lo que el paquete lo envió este nodo
 		//Calculamos el retardo
-		Time retardo = (Simulator::Now() -EnviosUDP[uid_recibido]);    //si lo encontramos calculamos el retardo
+		Time retardo_pel = (Simulator::Now() -EnviosUDP[uid_recibido]);    //si lo encontramos calculamos el retardo
 		
 		//Retiramos la tupla en la que se encontraba este paquete
 		EnviosUDP.erase(Comparador); 
@@ -290,37 +324,66 @@ void Observador::PaqueteRecibidoPel (Ptr<const Packet> pqt, const Address &)
 		NS_LOG_DEBUG("Recepcion de paquete ENCONTRADO: " << uid_recibido);
 		
 		//Si existe retardo, lo almacenamos para posteriormente calcular el estadistico
-		NS_LOG_DEBUG("Instante: " << Simulator::Now() << " Retardo calculado " << retardo << " para el paquete: " << uid_recibido);
-		m_retardos.Update (retardo.GetMilliSeconds());
+		NS_LOG_DEBUG("Instante: " << Simulator::Now() << " Retardo calculado " << retardo_pel << " para el paquete: " << uid_recibido);
+		m_retardos_pel.Update (retardo_pel.GetMilliSeconds());
 		
 		if(m_paquetesRxPe > 1)
-			m_variacion_retardos.Update(abs(ultimo_retardo.GetMilliSeconds() - retardo.GetMilliSeconds()));
+			m_variacion_retardos_pel.Update(abs(ultimo_retardo_pel.GetMilliSeconds() - retardo_pel.GetMilliSeconds()));
 	
 		//Actualizamos "ultimo_retardo" para el siguiente paquete
-		ultimo_retardo = retardo;
+		ultimo_retardo_pel = retardo_pel;
 	}
 }
 
 //Funcion que devuelve el porcentaje de paquetes correctos en la comunicacion entre los nodos C y E.
 double Observador::GetPorcentajeCorrecto ()
 {
-	NS_LOG_INFO("Rx = " << m_numPaqRx << " y Tx = " << m_paquetesTx);
-	double porcentaje = ((double)m_numPaqRx / ((double) m_paquetesTx))*100;
+	PORCENTAJE porcentaje;
+
+	NS_LOG_INFO ("Porcentaje referido a servidor VIP");
+	NS_LOG_INFO("Rx = " << m_paquetesRxVip << " y Tx = " << m_paquetesTxVip);
+	porcentaje.porcentaje_vip = ((double)m_paquetesRxVip / ((double) m_paquetesTxVip))*100;
+
+	NS_LOG_INFO ("Porcentaje referido a servidor TV");
+	NS_LOG_INFO("Rx = " << m_paquetesRxTv << " y Tx = " << m_paquetesTxTv);
+	porcentaje.porcentaje_tv = ((double)m_paquetesRxTv / ((double) m_paquetesTxTv))*100;
+
+	NS_LOG_INFO ("Porcentaje referido a servidor STREAMING");
+	NS_LOG_INFO("Rx = " << (m_paquetesRxSe + m_paquetesRxPe) << " y Tx = " << (m_paquetesTxSe + m_paquetesTxPe));
+	porcentaje.porcentaje_stream = (((double)m_paquetesRxSe + (double)m_paquetesRxPe) / (((double) m_paquetesTxSe) + (double)m_paquetesTxPe))*100;
 	
-	if(porcentaje>100)
-		porcentaje = 100;
-	
+	if (porcentaje_vip > 100)
+		porcentaje_vip = 100;
+
+	if (porcentaje_tv > 100)
+		porcentaje_tv = 100;
+
+	if (porcentaje_stream > 100)
+		porcentaje_stream = 100;
+
 	return porcentaje;
 }
 
 //Funcion que devuelve el retardo medio calculado a lo largo de la simulacion
 double Observador::GetRetardoMedio ()
 {	
-	return m_retardos.Mean();
+	MEDIARETARDO retardos;
+
+	retardos.mediaRetardo_vip = m_retardos_vip.Mean(); 
+	retardos.mediaRetardo_tv = m_retardos_tv.Mean();
+	retardos.mediaRetardo_stream = m_retardos_pel.Mean() + m_retardos_ser.Mean();
+
+	return retardos;
 }
 
 //Funcion que devuelve el valor medio de la variacion de retardo calculada a lo largo de la simulacion
 double Observador::GetVariacionMedia ()
 {
-	return m_variacion_retardos.Mean();
+	VARIACIONRETARDO variacion;
+
+	variacion.variacionRetardo_vip = m_variacion_retardos_vip.Mean(); 
+	variacion.variacionRetardo_tv = m_variacion_retardos_tv.Mean();
+	variacion.variacionRetardo_stream = m_variacion_retardos_pel.Mean() + m_variacion_retardos_ser.Mean();
+
+	return variacion;
 }
